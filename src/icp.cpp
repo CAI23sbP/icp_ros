@@ -52,7 +52,7 @@ ScanMatcherICPNode::ScanMatcherICPNode(): private_nh_("~"), listener_(&listener)
     pub_output_scan_unmatched = n.advertise<sensor_msgs::PointCloud2> ("scan_unmatched", 1);
     
     subMap = n.subscribe("map", 1, &ScanMatcherICPNode::mapCallback, this);
-    subScan = n.subscribe("scan_filtered", 1, &ScanMatcherICPNode::scanCallback, this);
+    subScan = n.subscribe("scan", 1, &ScanMatcherICPNode::scanCallback, this);
 
 
     try{
