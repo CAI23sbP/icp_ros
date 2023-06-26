@@ -48,12 +48,11 @@ ScanMatcherICPNode::ScanMatcherICPNode(): private_nh_("~"), listener_(&listener)
     
     projector_ = new laser_geometry::LaserProjection();
     
-    pub_info_ =  n.advertise<std_msgs::String> ("icp_info", 1);
-    pub_output_scan_matched = n.advertise<sensor_msgs::PointCloud2> ("scan_points_transformed", 1);
-    pub_output_scan_unmatched = n.advertise<sensor_msgs::PointCloud2> ("scan_points_unmatched", 1);
+    pub_output_scan_matched = n.advertise<sensor_msgs::PointCloud2> ("scan_matched", 1);
+    pub_output_scan_unmatched = n.advertise<sensor_msgs::PointCloud2> ("scan_unmatched", 1);
     
     subMap = n.subscribe("map", 1, &ScanMatcherICPNode::mapCallback, this);
-    subScan = n.subscribe("scan", 1, &ScanMatcherICPNode::scanCallback, this);
+    subScan = n.subscribe("scan_filtered", 1, &ScanMatcherICPNode::scanCallback, this);
 
 
     try{
@@ -62,10 +61,6 @@ ScanMatcherICPNode::ScanMatcherICPNode(): private_nh_("~"), listener_(&listener)
     } catch (...){
         ROS_WARN("[ICP] fail to init wait for transform");
     }
-    
-
-
-    
     last_processed_scan = ros::Time::now();
 
     ROS_WARN("[ICP] end initialize");
@@ -155,9 +150,6 @@ void ScanMatcherICPNode::mapCallback(const nav_msgs::OccupancyGrid& msg){
 void ScanMatcherICPNode::scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan_in){
     // updateParams();
     ros::Time start_cycle_time = ros::Time::now();
-    if(!m_run_icp_received && !m_monitoring_flag)
-        return ;
-
     if(!map_used)
     {
         ROS_WARN("[ICP] Waiting for map to be published");
@@ -313,7 +305,7 @@ void ScanMatcherICPNode::scanCallback(const sensor_msgs::LaserScan::ConstPtr& sc
 
             if (transformedCloud.points.size() > 0)
             {
-                ROS_DEBUG("[ICP] Inliers in dist %f: %zu of %zu percentage %f (%f)", ICP_INLIER_DIST, numinliers, transformedCloud.points.size(), (double) numinliers / (double) transformedCloud.points.size(), ICP_INLIER_THRESHOLD);
+                ROS_DEBUG("[ICP] Inliers in dist %f: %zu of %zu percentage %f", ICP_INLIER_DIST, numinliers, transformedCloud.points.size(), (double) numinliers / (double) transformedCloud.points.size());
                 inlier_perc = (double) numinliers / (double) transformedCloud.points.size();
             }
             
@@ -409,22 +401,13 @@ void ScanMatcherICPNode::updateParams(){
   
     private_nh_.param<bool>("use_sim_time", use_sim_time, false);
     private_nh_.param<double>("time_threshold", TIME_THRESHOLD, 1);
-    private_nh_.param<double>("angle_upper_threshold", ANGLE_UPPER_THRESHOLD, 1.57);
     private_nh_.param<double>("dist_upper_threshold", DIST_UPPER_THRESHOLD, 1.0);
-    private_nh_.param<double>("angle_threshold", ANGLE_THRESHOLD, 0.01);
-    private_nh_.param<double>("update_age_threshold", UPDATE_AGE_THRESHOLD, 1);
-    private_nh_.param<double>("dist_threshold", DIST_THRESHOLD, 0.01);
-    private_nh_.param<double>("icp_inlier_threshold", ICP_INLIER_THRESHOLD, 0.88);
     private_nh_.param<double>("icp_inlier_dist", ICP_INLIER_DIST, 0.1);
     private_nh_.param<double>("icp_num_iter", ICP_NUM_ITER, 100);
-    private_nh_.param<double>("pose_covariance_trans", POSE_COVARIANCE_TRANS, 0.5);
     private_nh_.param<double>("scan_rate", SCAN_RATE, 1);
     
     if (SCAN_RATE < .001)
         SCAN_RATE  = .001;
-
-    private_nh_.param<bool>("icp_mode", m_run_icp_received, false);
-    private_nh_.param<bool>("monitoring_mode", m_monitoring_flag, true);
 
     ROS_WARN("[ICP] odom frame : %s",ODOM_FRAME.c_str());
     ROS_WARN("[ICP] base laser frame : %s", BASE_LASER_FRAME.c_str());
@@ -436,24 +419,10 @@ void ScanMatcherICPNode::updateParams(){
     std::string use_sim_time_ = ss.str();
     ROS_WARN("[ICP] use sim time : %s", use_sim_time_.c_str());
     ROS_WARN("[ICP] time threshold : %.4f", TIME_THRESHOLD);
-    ROS_WARN("[ICP] angle upper threshold : %.4f", ANGLE_UPPER_THRESHOLD);
     ROS_WARN("[ICP] dist upper threshold : %.4f", DIST_UPPER_THRESHOLD);
-    ROS_WARN("[ICP] angle threshold : %.4f", ANGLE_THRESHOLD);
-    ROS_WARN("[ICP] update age threshold : %.4f", UPDATE_AGE_THRESHOLD);
-    ROS_WARN("[ICP] dist threshold : %.4f", DIST_THRESHOLD);
-    ROS_WARN("[ICP] icp inlier threshold : %.4f", ICP_INLIER_THRESHOLD);
     ROS_WARN("[ICP] icp inlier dist : %.4f", ICP_INLIER_DIST);
     ROS_WARN("[ICP] icp num iter : %.4f", ICP_NUM_ITER);
-    ROS_WARN("[ICP] pose covariance trans : %.4f", POSE_COVARIANCE_TRANS);
     ROS_WARN("[ICP] scan rate : %.4f", SCAN_RATE);
-    std::stringstream ss1;
-    ss1 << std::boolalpha << m_run_icp_received;
-    std::string m_run_icp_received_ = ss1.str();
-    std::stringstream ss2;
-    ss2 << std::boolalpha << m_monitoring_flag;
-    std::string m_monitoring_flag_ = ss2.str();
-    ROS_WARN("[ICP] icp mode : %s", m_run_icp_received_.c_str());
-    ROS_WARN("[ICP] monitoring mode : %s", m_monitoring_flag_.c_str());
 }
         
 int main(int argc, char** argv){
