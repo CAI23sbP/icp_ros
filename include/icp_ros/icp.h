@@ -43,9 +43,6 @@ class ScanMatcherICPNode
         void matrixAsTransfrom(const Eigen::Matrix4f &in_mat,  tf::Transform& out_transform);
         pcl::KdTree<pcl::PointXYZ>::Ptr getTree(pcl::PointCloud<pcl::PointXYZ>::Ptr cloudb);
         void mapCallback(const nav_msgs::OccupancyGrid& msg);
-        bool icpLocalizationCallback(std_srvs::SetBool::Request& req, std_srvs::SetBool::Response& res);
-        bool icpMonitorCallback(std_srvs::SetBool::Request& req, std_srvs::SetBool::Response& res);
-        bool debugCallback(std_srvs::SetBool::Request& req, std_srvs::SetBool::Response& res);
         void scanCallback (const sensor_msgs::LaserScan::ConstPtr& scan_in);
         bool getTransform(tf::StampedTransform &trans , const std::string parent_frame, const std::string child_frame, const ros::Time stamp);
         void updateParams();
@@ -53,20 +50,11 @@ class ScanMatcherICPNode
     private:
         ros::NodeHandle n;
         ros::NodeHandle private_nh_;
-        ros::Publisher pub_output_;
-        ros::Publisher pub_output_scan;
-        ros::Publisher pub_output_scan_transformed;
+        ros::Publisher pub_output_scan_matched;
         ros::Publisher pub_output_scan_unmatched;
-        ros::Publisher pub_info_;
-        ros::Publisher pub_fitting_;
-        ros::Publisher pub_pose;
-        ros::Publisher pub_pose_m;
 
         ros::Subscriber subMap;
         ros::Subscriber subScan;
-        ros::ServiceServer icp_trigger_srv_;
-        ros::ServiceServer icp_monitor_srv_;
-        ros::ServiceServer debug_srv_;
 
         ros::Time last_processed_scan;
         ros::Time paramsWereUpdated;
@@ -79,27 +67,18 @@ class ScanMatcherICPNode
         std::string MAP_FRAME;
 
         //these should be parameters defines how good the match has to be to create a candidate for publishing a pose
-        double ICP_FITNESS_THRESHOLD;// =  0.025;
         //defines how much distance deviation from amcl to icp pose is needed to make us publish a pose
         double DIST_THRESHOLD;
         double DIST_UPPER_THRESHOLD;
-        // same for angle
-        double ANGLE_THRESHOLD;
-        double ANGLE_UPPER_THRESHOLD;
         // accept only scans one second old or younger
         double TIME_THRESHOLD;
-        double UPDATE_AGE_THRESHOLD;
         double UPDATE_TIME;
 
-        double ICP_INLIER_THRESHOLD;
         double ICP_INLIER_DIST;
 
-        double POSE_COVARIANCE_TRANS;
         double ICP_NUM_ITER;
 
         double SCAN_RATE;
-        int lastTimeSent;
-        int actScan;
 
         bool map_used;
         bool scan_used;
@@ -107,8 +86,6 @@ class ScanMatcherICPNode
 
         bool use_sim_time;
 
-        bool m_run_icp_received;
-        bool m_monitoring_flag;
         bool m_monitor_debug_flag;
 
         typedef pcl::PointCloud<pcl::PointXYZ> PointCloudT;
@@ -123,7 +100,6 @@ class ScanMatcherICPNode
         tf::TransformListener *listener_;
         tf::TransformListener listener;
         sensor_msgs::PointCloud2 cloud2;
-        sensor_msgs::PointCloud2 cloud2transformed_1;
         sensor_msgs::PointCloud2 cloud2transformed_2;
         sensor_msgs::PointCloud2 cloud2transformed_3;
 };
