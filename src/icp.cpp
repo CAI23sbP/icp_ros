@@ -35,6 +35,16 @@ static double normalize(double z){
     return atan2(sin(z),cos(z));
 }
 
+static double normalizeAngle(double radians) {
+    while (radians > 2.0 * M_PI) {
+        radians -= 2.0 * M_PI;
+    }
+    while (radians < 0.0) {
+        radians += 2.0 * M_PI;
+    }
+    return radians;
+}
+
 ScanMatcherICPNode::ScanMatcherICPNode(): private_nh_("~"), listener_(&listener)
 {
     updateParams();
@@ -187,13 +197,13 @@ void ScanMatcherICPNode::scanCallback(const sensor_msgs::LaserScan::ConstPtr& sc
     {
         begin_ = ros::Time::now();
 
-        tf::StampedTransform base_at_laser;
-        if (!getTransform(base_at_laser, ODOM_FRAME, BASE_FRAME, scan_in_time))
-        {
-            ROS_WARN("[ICP] Did not get base pose at laser scan time");
-            this->scan_callback_mutex.unlock();
-            return;
-        }
+        // tf::StampedTransform base_at_laser;
+        // if (!getTransform(base_at_laser, ODOM_FRAME, BASE_FRAME, scan_in_time))
+        // {
+        //     ROS_WARN("[ICP] Did not get base pose at laser scan time");
+        //     this->scan_callback_mutex.unlock();
+        //     return;
+        // }
 
         sensor_msgs::PointCloud cloud;
         sensor_msgs::PointCloud cloudInMap;
@@ -253,8 +263,6 @@ void ScanMatcherICPNode::scanCallback(const sensor_msgs::LaserScan::ConstPtr& sc
             sensor_msgs::convertPointCloudToPointCloud2(cloudInMap, cloud2);
             scan_used = true;
 
-            //pcl::IterativeClosestPointNonLinear<pcl::PointXYZ, pcl::PointXYZ> reg;
-            //pcl::GeneralizedIterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> reg;
             pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> reg;
             reg.setTransformationEpsilon(1e-6);
             
@@ -313,10 +321,11 @@ void ScanMatcherICPNode::scanCallback(const sensor_msgs::LaserScan::ConstPtr& sc
             last_processed_scan = scan_in_time;
             pcl::toROSMsg(transformedCloud, cloud2transformed_2);
             pcl::toROSMsg(unmatchedCloud, cloud2transformed_3);
+            
             std_msgs::Header header;
             header.stamp = ros::Time(0.0);
+            //park
             header.frame_id = MAP_FRAME;
-
             cloud2transformed_3.header = header;
             cloud2transformed_3.height = 1;
             cloud2transformed_3.point_step = 16;
@@ -325,27 +334,106 @@ void ScanMatcherICPNode::scanCallback(const sensor_msgs::LaserScan::ConstPtr& sc
 
             scan_transformed_used = true;
 
-            double dist = sqrt((t.getOrigin().x() * t.getOrigin().x()) + (t.getOrigin().y() * t.getOrigin().y()));
-            double angleDist = t.getRotation().getAngle();
-            tf::Vector3 rotAxis  = t.getRotation().getAxis();
-            t =  t * oldPose;
+            // Define the target frame you want to transform to
+            //CHAT
+            std::string target_frame = TARGET_FRAME;
+            ros::Time time_stamp = ros::Time::now();
+            if (target_frame != MAP_FRAME){
+            // Define a tf listener
 
-            tf::StampedTransform base_after_icp;
-            if(!getTransform(base_after_icp, ODOM_FRAME, BASE_FRAME, ros::Time(0)))
-            {
-                ROS_WARN("[ICP] Did not get base pose at now");
-                this->scan_callback_mutex.unlock();
+                // Create a temporary PointCloud for the transformed points
+                sensor_msgs::PointCloud2 cloud_temp3;
+                std::vector<uint8_t> cloud_temp3_data(cloud2transformed_3.data);
+                cloud_temp3.data = cloud_temp3_data;
+                cloud_temp3.header.frame_id = target_frame;
 
-                return;
+                // Look up the transform from the current frame of cloud2transformed_3 to the target frame
+                tf::StampedTransform transform;
+                if (!getTransform(transform, target_frame, MAP_FRAME, time_stamp)){
+                    ROS_WARN("Failed to Transform");
+                    return;
+                }
+
+                // float yaw = normalizeAngle(transform.getRotation().getAngle());
+                float trans_x = transform.getOrigin().x();
+                float trans_y = transform.getOrigin().y();
+                float yaw = tf::getYaw(transform.getRotation()); 
+
+                // Iterate through the points in cloud2transformed_3 and transform them
+                for (size_t i = 0; i < cloud2transformed_3.data.size(); i += cloud2transformed_3.point_step) {
+                    // Calculate the offsets for x, y, and z fields
+
+                    size_t x_offset = cloud2transformed_3.fields[0].offset;
+                    size_t y_offset = cloud2transformed_3.fields[1].offset;
+                    size_t z_offset = cloud2transformed_3.fields[2].offset;
+                    // Extract the x, y, and z values from the data buffer
+                    float x, y, z;
+                    memcpy(&x, &cloud2transformed_3.data[i + x_offset], sizeof(float));
+                    memcpy(&y, &cloud2transformed_3.data[i + y_offset], sizeof(float));
+                    memcpy(&z, &cloud2transformed_3.data[i + z_offset], sizeof(float));
+
+                    // Transform the point to the new frame
+                    try {
+
+                        // Perform the transformation
+                        float tx = (x * cos(yaw) - y * sin(yaw) + trans_x);
+                        float ty = (y * cos(yaw) + x * sin(yaw) + trans_y);
+
+                        // Update the transformed values back to the data buffer
+                        memcpy(&cloud_temp3.data[i + x_offset], &tx, sizeof(float));
+                        memcpy(&cloud_temp3.data[i + y_offset], &ty, sizeof(float));
+                        memcpy(&cloud_temp3.data[i + z_offset], &z, sizeof(float));                                     
+                    } catch (tf::TransformException& ex) {
+                        
+                        ROS_WARN("[ICP] Failed to transform point %zu to the target frame: %s", i, ex.what());
+                    }
+                }
+                
+                // Create a temporary PointCloud for the transformed points
+                sensor_msgs::PointCloud2 cloud_temp2;
+                std::vector<uint8_t> cloud_temp2_data(cloud2transformed_2.data);
+                cloud_temp2.data = cloud_temp2_data;
+                cloud_temp2.header.frame_id = target_frame;
+
+                for (size_t i = 0; i < cloud2transformed_2.data.size(); i += cloud2transformed_2.point_step) {
+                    // Calculate the offsets for x, y, and z fields
+
+                    size_t x_offset = cloud2transformed_2.fields[0].offset;
+                    size_t y_offset = cloud2transformed_2.fields[1].offset;
+                    size_t z_offset = cloud2transformed_2.fields[2].offset;
+                    // Extract the x, y, and z values from the data buffer
+                    float x, y, z;
+                    memcpy(&x, &cloud2transformed_2.data[i + x_offset], sizeof(float));
+                    memcpy(&y, &cloud2transformed_2.data[i + y_offset], sizeof(float));
+                    memcpy(&z, &cloud2transformed_2.data[i + z_offset], sizeof(float));
+
+                   
+                    // Transform the point to the new frame
+                    try {
+
+                        // Perform the transformation
+                        float tx = (x * cos(yaw) - y * sin(yaw) + trans_x);
+                        float ty = (y * cos(yaw) + x * sin(yaw) + trans_y);
+
+                        // Update the transformed values back to the data buffer
+                        memcpy(&cloud_temp2.data[i + x_offset], &tx, sizeof(float));
+                        memcpy(&cloud_temp2.data[i + y_offset], &ty, sizeof(float));
+                        memcpy(&cloud_temp2.data[i + z_offset], &z, sizeof(float));                                     
+                    } catch (tf::TransformException& ex) {
+                        
+                        ROS_WARN("[ICP] Failed to transform point %zu to the target frame: %s", i, ex.what());
+                    }
+                }
+                // Update the header frame ID to the new frame
+                cloud2transformed_3.header.frame_id = target_frame;
+                cloud2transformed_3.header.stamp = time_stamp;
+                cloud2transformed_3.data = cloud_temp3.data;
+
+                cloud2transformed_2.header.frame_id = target_frame;
+                cloud2transformed_2.header.stamp = time_stamp;
+                cloud2transformed_2.data = cloud_temp2.data;
+                //CHAT
             }
-            else
-            {
-                tf::Transform rel = base_at_laser.inverseTimes(base_after_icp);
-                ROS_DEBUG("[ICP] relative motion of robot while doing icp: %f [cm] %f [deg]", rel.getOrigin().length(), rel.getRotation().getAngle() * 180 / M_PI);
-                t= t * rel;
-            }
-            
-
             if(m_monitor_debug_flag == true){
                 pub_output_scan_matched.publish(cloud2transformed_2);
                 pub_output_scan_unmatched.publish(cloud2transformed_3);
@@ -392,12 +480,13 @@ bool ScanMatcherICPNode::getTransform(tf::StampedTransform &trans , const std::s
 void ScanMatcherICPNode::updateParams(){
     
     paramsWereUpdated = ros::Time::now();
-    // nh.param<std::string>("default_param", default_param, "default_value");
     private_nh_.param<std::string>("odom_frame", ODOM_FRAME, "odom");
     private_nh_.param<std::string>("base_laser_frame", BASE_LASER_FRAME, "base_laser_link");
     private_nh_.param<std::string>("map_frame", MAP_FRAME, "map");
     private_nh_.param<std::string>("base_frame", BASE_FRAME, "base_link");
+    private_nh_.param<std::string>("target_frame", TARGET_FRAME, "base_link");
     private_nh_.param<double>("update_time", UPDATE_TIME, 0.0);  // Updated time for spreading particles
+  
   
     private_nh_.param<bool>("use_sim_time", use_sim_time, false);
     private_nh_.param<double>("time_threshold", TIME_THRESHOLD, 1);
