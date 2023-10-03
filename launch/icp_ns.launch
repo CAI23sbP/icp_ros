@@ -4,6 +4,7 @@
     <param name="base_laser_frame"  value="r1/base_scan"/>
     <param name="odom_frame"        value="r1/odom"/>
     <param name="map_frame"         value="map"/>
+    <param name="target_frame" value="rl/base_scan"/>
 
     <param name="update_time"             value="0.0"/>
     <param name="use_sim_time"            value="false"/>
