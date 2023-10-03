@@ -7,6 +7,8 @@
 
 #include <ros/ros.h>
 #include <ros/console.h>
+#include <math.h>
+#include <cmath>
 
 #include <std_msgs/String.h>
 #include <std_msgs/Int8.h>
@@ -24,6 +26,8 @@
 #include <pcl/io/pcd_io.h>
 #include <laser_geometry/laser_geometry.h>
 #include <tf/transform_listener.h>
+#include <tf2/convert.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
 //#include <pcl/registration/icp.h>
 #include <pcl/registration/icp_nl.h>
@@ -65,6 +69,7 @@ class ScanMatcherICPNode
         std::string ODOM_FRAME;
         std::string BASE_FRAME;
         std::string MAP_FRAME;
+        std::string TARGET_FRAME;
 
         //these should be parameters defines how good the match has to be to create a candidate for publishing a pose
         //defines how much distance deviation from amcl to icp pose is needed to make us publish a pose
