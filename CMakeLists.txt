@@ -4,9 +4,6 @@ project(icp_ros)
 include(CheckIncludeFile)
 include(CheckSymbolExists)
 
-if(NOT CMAKE_CXX_STANDARD)
-  set(CMAKE_CXX_STANDARD 11)
-endif()
 
 find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
