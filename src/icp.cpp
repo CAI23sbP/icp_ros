@@ -292,6 +292,7 @@ void ScanMatcherICPNode::scanCallback(const sensor_msgs::LaserScan::ConstPtr& sc
             scan_transformed_used = false;
             PointCloudT transformedCloud;
             PointCloudT unmatchedCloud;
+            PointCloudT matchedCloud;
             pcl::transformPointCloud (*input_scan_cloud, transformedCloud, reg.getFinalTransformation());
 
             // void pcl::transformPointCloud<pcl::PointXYZ>(const pcl::PointCloud<pcl::PointXYZ> &cloud_in, pcl::PointCloud<pcl::PointXYZ> &cloud_out, const Eigen::Matrix4f &transform, bool copy_all_fields = true)
@@ -305,10 +306,16 @@ void ScanMatcherICPNode::scanCallback(const sensor_msgs::LaserScan::ConstPtr& sc
             size_t numinliers = 0;
 
             for (size_t k = 0; k < transformedCloud.points.size(); ++k )
-            {
+            {                                       
                 if (mapTree->radiusSearch(transformedCloud.points[k], ICP_INLIER_DIST, nn_indices, nn_sqr_dists, 1) != 0)
-                    numinliers += 1;
-                else unmatchedCloud.push_back(transformedCloud.points[k]);
+                     {
+                        numinliers += 1;
+                        matchedCloud.push_back(transformedCloud.points[k]);
+                    }
+                   else
+                        {
+                            unmatchedCloud.push_back(transformedCloud.points[k]);
+                        }
             }
 
             if (transformedCloud.points.size() > 0)
@@ -319,7 +326,7 @@ void ScanMatcherICPNode::scanCallback(const sensor_msgs::LaserScan::ConstPtr& sc
             
 
             last_processed_scan = scan_in_time;
-            pcl::toROSMsg(transformedCloud, cloud2transformed_2);
+            pcl::toROSMsg(matchedCloud, cloud2transformed_2);
             pcl::toROSMsg(unmatchedCloud, cloud2transformed_3);
             
             std_msgs::Header header;
